@@ -24,10 +24,13 @@ namespace Business.Services
         }
         public async Task AddAsync(ProductModel model)
         {
-            if (model != null && model.Price < 0)
+            if (model == null)
             {
-                throw new MarketException("'price cannot be negative!");
-
+                throw new MarketException("Model is Null!");
+            }
+            if (model.Price < 0)
+            {
+                throw new MarketException("Price cannot be negative!");
             }
 
             if (string.IsNullOrEmpty(model.ProductName))
@@ -41,6 +44,11 @@ namespace Business.Services
 
         public async  Task AddCategoryAsync(ProductCategoryModel categoryModel)
         {
+            if (categoryModel == null)
+            {
+                throw new MarketException("Model is Null!");
+            }
+
             if (string.IsNullOrEmpty(categoryModel.CategoryName)) 
             {
                 throw new MarketException("Category name is empty!");
@@ -50,35 +58,32 @@ namespace Business.Services
             await _unitOfWork.SaveAsync();
         }
 
-        public Task DeleteAsync(int modelId)
+        public async Task DeleteAsync(int modelId)
         {
-            return _unitOfWork.ProductRepository.DeleteByIdAsync(modelId).ContinueWith(t => _unitOfWork.SaveAsync());
+            await _unitOfWork.ProductRepository.DeleteByIdAsync(modelId);
+            await _unitOfWork.SaveAsync();
         }
 
         public async Task<IEnumerable<ProductModel>> GetAllAsync()
         {
             var products = await _unitOfWork.ProductRepository.GetAllWithDetailsAsync();
-            if (products == null ) 
-            {
-                throw new MarketException("Product are not found");
-            }
-
-            return _mapper.Map<IEnumerable<Product>, IEnumerable<ProductModel>>(products);
+            return products == null
+                ? throw new MarketException("Product are not found")
+                : _mapper.Map<IEnumerable<Product>, IEnumerable<ProductModel>>(products);
         }
 
         public async Task<IEnumerable<ProductCategoryModel>> GetAllProductCategoriesAsync()
         {
-            var productCategories = await _unitOfWork.ProductCategoryRepository.GetAllAsync();
-            if (productCategories == null)
-            {
-                throw new MarketException("Product categories are not found");
-            }
-
+            var productCategories = await _unitOfWork.ProductCategoryRepository.GetAllAsync() ?? throw new MarketException("Product categories are not found");
             return _mapper.Map<IEnumerable<ProductCategory>, IEnumerable<ProductCategoryModel>>(productCategories);
         }
 
         public async Task<IEnumerable<ProductModel>> GetByFilterAsync(FilterSearchModel filterSearch)
         {
+            if (filterSearch == null) 
+            {
+                throw new MarketException("Model is Null!");
+            }
             // Get all products
             var products = await _unitOfWork.ProductRepository.GetAllWithDetailsAsync();
 

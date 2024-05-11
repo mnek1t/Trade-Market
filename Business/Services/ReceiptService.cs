@@ -3,12 +3,9 @@ using Business.Interfaces;
 using Business.Models;
 using Data.Entities;
 using Data.Interfaces;
-using Business.Models;
-using Data.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Business.Validation;
 
@@ -23,10 +20,11 @@ namespace Business.Services
             _unitOfWork = unitOfWork;
             _mapper = mapper;
         }
-        public Task AddAsync(ReceiptModel model)
+        public async Task AddAsync(ReceiptModel model)
         {
             var receipt = _mapper.Map<Receipt>(model);
-            return _unitOfWork.ReceiptRepository.AddAsync(receipt).ContinueWith(t => _unitOfWork.SaveAsync());
+            await _unitOfWork.ReceiptRepository.AddAsync(receipt);
+            await _unitOfWork.SaveAsync();
         }
 
         public async Task AddProductAsync(int productId, int receiptId, int quantity)
@@ -57,13 +55,14 @@ namespace Business.Services
             }
             else 
             {
-                if (receipt.ReceiptDetails.FirstOrDefault(x => x.ProductId == productId) != null)
+                var receiptDetail = receipt.ReceiptDetails.FirstOrDefault(x => x.ProductId == productId);
+                if (receiptDetail != null)
                 {
-                    receipt.ReceiptDetails.FirstOrDefault(x => x.ProductId == productId).Quantity += quantity;
+                    receiptDetail.Quantity += quantity;
                 }
             }
-            
-            
+
+
 
             await _unitOfWork.SaveAsync();
         }

@@ -71,24 +71,14 @@ namespace Business.Services
         public async Task<IEnumerable<CustomerModel>> GetCustomersByProductIdAsync(int productId)
         {
             var customers = await _unitOfWork.CustomerRepository.GetAllWithDetailsAsync();
-            List<Customer> filteredCustomers = new List<Customer>();
             if (customers == null)
             {
                 throw new MarketException("Customers are not found");
             }
-            foreach (var customer in customers)
-            {
-                foreach (var receipt in customer.Receipts)
-                {
-                    // Use Any method to check if any ReceiptDetail has the given ProductId
-                    if (receipt.ReceiptDetails.Any(x => x.ProductId == productId))
-                    {
-                        filteredCustomers.Add(customer);
-                        // Break the inner loop as we've found a matching product for this customer
-                        break;
-                    }
-                }
-            }
+            var filteredCustomers = customers.Where(c => c.Receipts
+                                                            .Any(r => r.ReceiptDetails
+                                                            .Any(rd => rd.ProductId == productId)))
+                                                .ToList();
             return _mapper.Map<IEnumerable<Customer>, IEnumerable<CustomerModel>>(filteredCustomers);
         }
 
