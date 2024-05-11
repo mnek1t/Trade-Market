@@ -14,6 +14,6 @@ namespace Business.Models
         public string ProductName { get; set; }
         public decimal Price { get; set; }
 
-        public ICollection<int> ReceiptDetailsIds { get; set; }
+        public ICollection<int> ReceiptDetailIds { get; set; }
     }
 }

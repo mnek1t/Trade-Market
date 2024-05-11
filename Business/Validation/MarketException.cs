@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace Business.Validation
 {
-    public class MarketException
+    public class MarketException: Exception
     {
+        public MarketException(string message) : base(message){}
     }
 }

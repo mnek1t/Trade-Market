@@ -1,5 +1,10 @@
-﻿using Business.Interfaces;
+﻿using AutoMapper;
+using Business.Interfaces;
 using Business.Models;
+using Business.Validation;
+using Data.Data;
+using Data.Entities;
+using Data.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,34 +15,102 @@ namespace Business.Services
 {
     public class CustomerService : ICustomerService
     {
-        public Task AddAsync(CustomerModel model)
+        private readonly IMapper _mapper;
+        private readonly IUnitOfWork _unitOfWork;
+        public CustomerService(IUnitOfWork unitOfWork, IMapper mapper)
         {
-            throw new NotImplementedException();
+            _unitOfWork = unitOfWork;
+            _mapper = mapper;
+        }
+        public async Task AddAsync(CustomerModel model)
+        {
+            if (model == null)
+            {
+                throw new MarketException("Attempt to create null object");
+
+            }
+
+            if (model.BirthDate.Year < 1900 || model.BirthDate.Year > DateTime.Now.Year)
+            {
+                throw new MarketException("Attempt to create null object");
+
+            }
+
+            if (string.IsNullOrEmpty(model.Name))
+            {
+                throw new MarketException("Product name is empty!");
+            }
+            var customer = _mapper.Map<Customer>(model);
+            await _unitOfWork.CustomerRepository.AddAsync(customer);
+            await _unitOfWork.SaveAsync();
         }
 
-        public Task DeleteAsync(int modelId)
+        public async Task DeleteAsync(int modelId)
         {
-            throw new NotImplementedException();
+            await _unitOfWork.CustomerRepository.DeleteByIdAsync(modelId);
+            await _unitOfWork.SaveAsync();
         }
 
-        public Task<IEnumerable<CustomerModel>> GetAllAsync()
+        public async Task<IEnumerable<CustomerModel>> GetAllAsync()
         {
-            throw new NotImplementedException();
+            var customers = await _unitOfWork.CustomerRepository.GetAllWithDetailsAsync();
+            return _mapper.Map<IEnumerable<Customer>, IEnumerable<CustomerModel>>(customers);
         }
 
-        public Task<CustomerModel> GetByIdAsync(int id)
+        public async  Task<CustomerModel> GetByIdAsync(int id)
         {
-            throw new NotImplementedException();
+            var customer = await _unitOfWork.CustomerRepository.GetByIdWithDetailsAsync(id);
+            if (customer == null)
+            {
+                throw new MarketException("customer is null");
+            }
+
+            return _mapper.Map<Customer, CustomerModel>(customer);
         }
 
-        public Task<IEnumerable<CustomerModel>> GetCustomersByProductIdAsync(int productId)
+        public async Task<IEnumerable<CustomerModel>> GetCustomersByProductIdAsync(int productId)
         {
-            throw new NotImplementedException();
+            var customers = await _unitOfWork.CustomerRepository.GetAllWithDetailsAsync();
+            List<Customer> filteredCustomers = new List<Customer>();
+            if (customers == null)
+            {
+                throw new MarketException("Customers are not found");
+            }
+            foreach (var customer in customers)
+            {
+                foreach (var receipt in customer.Receipts)
+                {
+                    // Use Any method to check if any ReceiptDetail has the given ProductId
+                    if (receipt.ReceiptDetails.Any(x => x.ProductId == productId))
+                    {
+                        filteredCustomers.Add(customer);
+                        // Break the inner loop as we've found a matching product for this customer
+                        break;
+                    }
+                }
+            }
+            return _mapper.Map<IEnumerable<Customer>, IEnumerable<CustomerModel>>(filteredCustomers);
         }
 
-        public Task UpdateAsync(CustomerModel model)
+        public async Task UpdateAsync(CustomerModel model)
         {
-            throw new NotImplementedException();
+            if (model == null)
+            {
+                throw new MarketException("Attempt to create null object");
+
+            }
+            if (string.IsNullOrEmpty(model.Surname))
+            {
+                throw new MarketException("Product name is empty!");
+            }
+            if (model.BirthDate.Year < 1900 || model.BirthDate.Year > DateTime.Now.Year)
+            {
+                throw new MarketException("Attempt to create null object");
+
+            }
+            var customer = _mapper.Map<Customer>(model);
+            _unitOfWork.CustomerRepository.Update(customer);
+            await _unitOfWork.SaveAsync();
         }
     }
 }

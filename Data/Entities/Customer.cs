@@ -18,6 +18,6 @@ namespace Data.Entities
         public int PersonId { get; set; }
         
         public Person Person { get; set; }
-        public ICollection<Receipt> Receipts { get; }
+        public ICollection<Receipt> Receipts { get; set; }
     }
 }

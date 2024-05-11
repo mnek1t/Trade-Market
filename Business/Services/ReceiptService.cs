@@ -1,68 +1,186 @@
-﻿using Business.Interfaces;
+﻿using AutoMapper;
+using Business.Interfaces;
 using Business.Models;
+using Data.Entities;
+using Data.Interfaces;
+using Business.Models;
+using Data.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Business.Validation;
 
 namespace Business.Services
 {
     public class ReceiptService : IReceiptService
     {
+        private readonly IMapper _mapper;
+        private readonly IUnitOfWork _unitOfWork;
+        public ReceiptService(IUnitOfWork unitOfWork, IMapper mapper)
+        {
+            _unitOfWork = unitOfWork;
+            _mapper = mapper;
+        }
         public Task AddAsync(ReceiptModel model)
         {
-            throw new NotImplementedException();
+            var receipt = _mapper.Map<Receipt>(model);
+            return _unitOfWork.ReceiptRepository.AddAsync(receipt).ContinueWith(t => _unitOfWork.SaveAsync());
         }
 
-        public Task AddProductAsync(int productId, int receiptId, int quantity)
+        public async Task AddProductAsync(int productId, int receiptId, int quantity)
         {
-            throw new NotImplementedException();
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdWithDetailsAsync(receiptId);
+
+            if (receipt == null)
+            {
+                throw new MarketException("Receipt is null!");
+            }
+            if (_unitOfWork.ProductRepository != null)
+            {
+                var product = await _unitOfWork.ProductRepository.GetByIdAsync(productId);
+
+                if (product == null)
+                {
+                    throw new MarketException("Product is null!");
+                }
+                var model = new ReceiptDetailModel
+                {
+                    ReceiptId = receiptId,
+                    ProductId = productId,
+                    Quantity = quantity,
+                    DiscountUnitPrice = product.Price * (1 - (decimal)receipt.Customer.DiscountValue / 100),
+                    UnitPrice = product.Price
+                };
+                await _unitOfWork.ReceiptDetailRepository.AddAsync(_mapper.Map<ReceiptDetail>(model));
+            }
+            else 
+            {
+                if (receipt.ReceiptDetails.FirstOrDefault(x => x.ProductId == productId) != null)
+                {
+                    receipt.ReceiptDetails.FirstOrDefault(x => x.ProductId == productId).Quantity += quantity;
+                }
+            }
+            
+            
+
+            await _unitOfWork.SaveAsync();
         }
 
-        public Task CheckOutAsync(int receiptId)
+        public async Task CheckOutAsync(int receiptId)
         {
-            throw new NotImplementedException();
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdAsync(receiptId);
+            if (receipt == null)
+            {
+                throw new MarketException($"Receipt with id {receiptId} does not exist.");
+            }
+
+            receipt.IsCheckedOut = true;
+            _unitOfWork.ReceiptRepository.Update(receipt);
+            await _unitOfWork.SaveAsync();
         }
 
-        public Task DeleteAsync(int modelId)
+        public async Task DeleteAsync(int modelId)
         {
-            throw new NotImplementedException();
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdWithDetailsAsync(modelId);
+            if (receipt == null)
+            {
+                throw new MarketException($"Receipt with id does not exist.");
+            }
+            foreach (var detail in receipt.ReceiptDetails)
+            {
+                _unitOfWork.ReceiptDetailRepository.Delete(detail);
+            }
+            await _unitOfWork.ReceiptRepository.DeleteByIdAsync(modelId);
+            await _unitOfWork.SaveAsync();
         }
 
-        public Task<IEnumerable<ReceiptModel>> GetAllAsync()
+        public async Task<IEnumerable<ReceiptModel>> GetAllAsync()
         {
-            throw new NotImplementedException();
+            var receipts = await _unitOfWork.ReceiptRepository.GetAllWithDetailsAsync();
+
+            if (receipts == null)
+            {
+                throw new MarketException("Reciepts is null");
+            }
+
+            return _mapper.Map<IEnumerable<Receipt>, IEnumerable<ReceiptModel>>(receipts);
         }
 
-        public Task<ReceiptModel> GetByIdAsync(int id)
+        public async Task<ReceiptModel> GetByIdAsync(int id)
         {
-            throw new NotImplementedException();
+
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdWithDetailsAsync(id);
+            if (receipt == null)
+            {
+                // Handle the case when the receipt with the given id does not exist
+                throw new MarketException("reciept is null");
+            }
+
+            return _mapper.Map<Receipt, ReceiptModel>(receipt);
         }
 
-        public Task<IEnumerable<ReceiptDetailModel>> GetReceiptDetailsAsync(int receiptId)
+        public async Task<IEnumerable<ReceiptDetailModel>> GetReceiptDetailsAsync(int receiptId)
         {
-            throw new NotImplementedException();
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdWithDetailsAsync(receiptId);
+            if (receipt == null)
+            {
+                throw new MarketException("reciept is null");
+            }
+
+            var receiptDetails = receipt.ReceiptDetails;
+            return _mapper.Map<IEnumerable<ReceiptDetail>, IEnumerable<ReceiptDetailModel>>(receiptDetails);
+        }
+         
+        public async Task<IEnumerable<ReceiptModel>> GetReceiptsByPeriodAsync(DateTime startDate, DateTime endDate)
+        {
+            var receipts = await _unitOfWork.ReceiptRepository.GetAllWithDetailsAsync();
+            var filteredReceipts = receipts.Where(r => r.OperationDate >= startDate && r.OperationDate <= endDate);
+
+            return _mapper.Map<IEnumerable<Receipt>, IEnumerable<ReceiptModel>>(filteredReceipts);
+
         }
 
-        public Task<IEnumerable<ReceiptModel>> GetReceiptsByPeriodAsync(DateTime startDate, DateTime endDate)
+        public async Task RemoveProductAsync(int productId, int receiptId, int quantity)
         {
-            throw new NotImplementedException();
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdWithDetailsAsync(receiptId);
+
+            if (receipt == null)
+            {
+                throw new MarketException("Receipt is null!");
+            }
+            var receiptDetails = receipt.ReceiptDetails.FirstOrDefault(x => x.ProductId == productId);
+            if (receiptDetails == null)
+            {
+                throw new MarketException("Receipt Deatails is null!");
+            }
+            receiptDetails.Quantity -= quantity;
+            if (receiptDetails.Quantity == 0) 
+            {
+                _unitOfWork.ReceiptDetailRepository.Delete(receiptDetails);
+            }
+
+            await _unitOfWork.SaveAsync();
         }
 
-        public Task RemoveProductAsync(int productId, int receiptId, int quantity)
+        public async Task<decimal> ToPayAsync(int receiptId)
         {
-            throw new NotImplementedException();
+            var receipt = await _unitOfWork.ReceiptRepository.GetByIdWithDetailsAsync(receiptId);
+
+            decimal total = 0;
+            foreach (var detail in receipt.ReceiptDetails)
+            {
+                total += detail.Quantity * detail.DiscountUnitPrice;
+            }
+            return total;
         }
 
-        public Task<decimal> ToPayAsync(int receiptId)
+        public async Task UpdateAsync(ReceiptModel model)
         {
-            throw new NotImplementedException();
-        }
-
-        public Task UpdateAsync(ReceiptModel model)
-        {
-            throw new NotImplementedException();
+            var receipt = _mapper.Map<ReceiptModel, Receipt>(model);
+            _unitOfWork.ReceiptRepository.Update(receipt);
+            await _unitOfWork.SaveAsync();
         }
     }
 }
